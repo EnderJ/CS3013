@@ -22,6 +22,8 @@ struct node {//structure for the node
   char *name;
   int id;
   int length;
+  int bRunCount;
+  int * pIDs;
   struct node *next;
 };
 
@@ -40,12 +42,23 @@ void addToList(int id, char *name, int length) {
     }//end of while
     current->next = malloc(sizeof(struct node));
     current->next->id = id;
+  	current->next->bRunCount = 0;
     current->next->name = (char *)malloc(sizeof(char *) * length);
     for(int i=0; i<length; i++){
       current->next->name[i] = name[i];
     }//end of for
     current->next->next = NULL;
 }//end of addToList
+
+int totalBTaskCount(){
+  int total;
+  struct node * current = head;
+  while(current->next != NULL){
+    current = current->next;
+    total+=current->bRunCount;
+  }
+  return total;
+}
 
 void deleteList(){
   struct node * temp;
@@ -102,7 +115,7 @@ void executeCmd(int commandID){
   //printf("line 98");
   if(execvp(argv[0], argv) == -1)
   {
-    printf("User Command isn't valid.");
+  	printf("User Command isn't valid.\n");
     exit(0);
   }
   
@@ -113,6 +126,16 @@ void logOff(){
   deleteList();
   exit(0);
 }
+
+void printBRound()
+{
+      struct node * current = head; //
+      while(current->next != NULL) 
+      {
+        current = current->next;
+      }
+}
+
 
 int main(){//main method
   
@@ -205,6 +228,12 @@ void processCharCommands(char order){
           getcwd(currentDirectory, 2048);
           printf("%s \n", currentDirectory);
           break;
+    		case 'r':
+          printf("--Background Processes--");
+          
+    			printBRound();
+    			//do shit
+    			break;
         default:
             printf("This option is currently not available. Please try again.\n");
 
