@@ -22,8 +22,8 @@ struct node {//structure for the node
   char *name;
   int id;
   int length;
-  int bRunCount;
   int * pIDs;
+  bool isBackground;
   struct node *next;
 };
 
@@ -35,14 +35,15 @@ struct node *head = NULL;
 addToList function
   pushes an element onto a linked list for adding a command
 */
-void addToList(int id, char *name, int length) {
+void addToList(int id, char *name, int length, bool isBackground) {
     struct node * current = head;
     while (current->next != NULL) {
         current = current->next;
     }//end of while
     current->next = malloc(sizeof(struct node));
     current->next->id = id;
-  	current->next->bRunCount = 0;
+    current->next->pIDs = NULL; 
+    current->next->isBackground;
     current->next->name = (char *)malloc(sizeof(char *) * length);
     for(int i=0; i<length; i++){
       current->next->name[i] = name[i];
@@ -115,7 +116,7 @@ void executeCmd(int commandID){
   //printf("line 98");
   if(execvp(argv[0], argv) == -1)
   {
-  	printf("User Command isn't valid.\n");
+    printf("User Command isn't valid.\n");
     exit(0);
   }
   
@@ -136,14 +137,8 @@ void printBRound()
       }
 }
 
-
-int main(){//main method
-  
-  head = (struct node*)malloc(sizeof(struct node));
-  
-  while(1){
-    fflush(stdin);
-      //intial statements giving the commander options on what to do 
+void printStart(){
+  //intial statements giving the commander options on what to do 
       printf("===== Mid-Day Commander, v0 =====\n G’day, Commander! What command would you like to run?");
       printf("\n0. whoami : Prints out the result of the whoamicommand \n");
       printf("1. last : Prints out the result of the last command");
@@ -156,16 +151,28 @@ int main(){//main method
         printf(". ");
         printf("%s", current->name);
         printf(": User added Command \n");
+         if(current->isBackground)
+           printf("b\n
       }
       printf("a. add command: Adds a new command to the menu.\n");
       printf("c. change directory : Changes process working directory\n");
       printf("e. exit : Leave Mid-Day Commander\n");
       printf("p. pwd : Prints working directory\n");
 
-      char *optn = malloc(sizeof(char)*80);
-      size_t buffer = 80;
-      int na = getline(&optn, &buffer, stdin);
-      if(na ==-1)
+}
+
+
+int main(){//main method
+  
+  head = (struct node*)malloc(sizeof(struct node));
+  
+  while(1){
+    fflush(stdin);
+    printStart();
+    char *optn = malloc(sizeof(char)*80);
+    size_t buffer = 80;
+    int na = getline(&optn, &buffer, stdin);
+    if(na ==-1)
         logOff();
       optn[na-1] = '\0';
       char order = optn[0];
@@ -201,9 +208,8 @@ void processCharCommands(char order){
           if(na == -1)
             logOff();
           cmd[na-1] = '\0';
-
           //add the command to list
-          addToList(numID, cmd, strlen(cmd));
+          addToList(numID, cmd, strlen(cmd),cmd[na-2]=='&');
           numID++;//increments numID
           free(cmd);
           break;
@@ -228,12 +234,12 @@ void processCharCommands(char order){
           getcwd(currentDirectory, 2048);
           printf("%s \n", currentDirectory);
           break;
-    		case 'r':
+        case 'r':
           printf("--Background Processes--");
           
-    			printBRound();
-    			//do shit
-    			break;
+          printBRound();
+          //do shit
+          break;
         default:
             printf("This option is currently not available. Please try again.\n");
 
