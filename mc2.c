@@ -53,7 +53,8 @@ void addBprocess(int wPid,int ePid, struct cmdNode *n,struct timeval start) {
     current->next->wPid = wPid;
     current->next->ePid = ePid;
     current->next->cmdID = n->id;
-    current->next->jobNumber = ++bCount;
+    ++bCount;
+    current->next->jobNumber = bCount;
     current->next->cmdName = n->name;
     current->next->start = start;
     // set next to NULL
@@ -92,8 +93,6 @@ void completeBprocess(int PID) {
           return;
       }
       current = current->next;
-      current->jobNumber-=found;
-      
     }
     if(!found)
       printf("PID not in list\n");
@@ -243,10 +242,9 @@ void purgeBList(){
     current = current->next;
     int pid = waitpid(current->wPid,&status,WNOHANG);
     if(pid>0){
-      completeBprocess(pid);
+      runBStats(pid);
     }
   }
-
 }
 
 int main(){
@@ -396,21 +394,23 @@ void processBasicCmds(int command){
       }
     }
 }
-
+/*
 static int validCMD = 1;
 
 static void invalidCMD(int sign){
   validCMD = 0;
 } 
+*/
 
 void processCustomCommands(int order){
   struct timeval tstart;//struct data for time
   struct cmdNode * current = cHead;
-  signal(SIGINT,invalidCMD);
+  //signal(SIGINT,invalidCMD);
   int status;
   int fdc[2];
   if(pipe(fdc)==-1){
     fprintf(stderr, "Pipe Failed");
+    return;
   }
   int gcPID = -1;
   int pos = order - 2;
@@ -435,9 +435,9 @@ void processCustomCommands(int order){
       if(cPID){
         waitpid(cPID,&status,0);
       }
-      else
+      else{
         waitpid(gcPID,&status,0);
-
+      }
       if(WIFEXITED(status)){
         if(gcPID>0){
           printf("\n--Job Complete [%d] --\n",bCount);
@@ -448,23 +448,17 @@ void processCustomCommands(int order){
         runStats(tstart);
       }
       if(cPID==0){
-        if(validCMD)
-          exit(0);
-        else
-          raise(SIGINT);
+        exit(0);
       }
     }else if(cPID != 0){
       close(fdc[1]);
       read(fdc[0],&gcPID,sizeof(gcPID));
-      if(validCMD){
         addBprocess(cPID,gcPID,current,tstart);
         printf("--Command: %s --\n",current->name);
         printf("[%d]PID: %d\n",bCount,gcPID);
-      }
      }else if(current->isBackground==0||gcPID==0){
       executeCmd(current);
-      raise(SIGINT);
+
     }
-    validCMD = 1;
 } 
         
