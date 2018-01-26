@@ -79,21 +79,24 @@ void completeBprocess(int PID) {
     struct bNode * trash = NULL;
     while (current->next != NULL) {
       if(current->next->pid == PID){
-        found++;
-        bCount--;
         trash = current->next;
         if(trash->next != NULL){
           current->next = current->next->next;
+        }else{
+          current->next = NULL;
         }
         printf("--Job Complete [%d] --\n",trash->jobNumber);
         printf("Command Name:%s\n",trash->cmdName);
         printf("Process ID: %d\n",PID);
         free(trash);
+        found++;
+        bCount--;
         if(current==NULL||current->next==NULL)
           return;
       }
-      current->jobNumber-=found;
       current = current->next;
+      current->jobNumber-=found;
+      
     }
     if(!found)
       printf("PID not in list\n");
@@ -236,12 +239,15 @@ void logOff(){
 
 void purgeBList(){
   int status;
-  for(int i = 0; i < bCount;i++){
-    int PID = waitpid(-1,&status,WNOHANG);
-    if(PID!=0){
-      runBStats(PID);
+  struct bNode *current=bHead;
+  while(current->next!=NULL){
+    current = current->next;
+    int pid = waitpid(current->pid,&status,WNOHANG);
+    if(pid>0){
+      completeBprocess(pid);
     }
   }
+
 }
 
 int main(){
