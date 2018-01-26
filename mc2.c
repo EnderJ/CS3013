@@ -23,7 +23,8 @@ static int bCount = 0;
 struct bNode {
   int jobNumber;
   char *cmdName;
-  int pid;
+  int ePid;//pid of grandchild "executing" process
+  int wPid;//pid of child "waiting" process
   struct timeval start;
   int cmdID;
   struct bNode *next;
@@ -43,28 +44,27 @@ struct cmdNode *cHead = NULL;
 struct bNode *bHead = NULL;
 
 // adds a process to the background process list
-void addBprocess(int pid, struct cmdNode *n,struct timeval start) {
-    struct bNode * current = bHead;
+void addBprocess(int wPid,int ePid, struct cmdNode *n,struct timeval start) {
+    struct bNode *current = bHead;
     while (current->next != NULL) {
         current = current->next;
     }//end of while
     current->next = malloc(sizeof(struct bNode));
-    current->next->pid = pid;
+    current->next->wPid = wPid;
+    current->next->ePid = ePid;
     current->next->cmdID = n->id;
     current->next->jobNumber = ++bCount;
     current->next->cmdName = n->name;
     current->next->start = start;
     // set next to NULL
     current->next->next = NULL;
-    printf("--Command: %s --\n",current->next->cmdName);
-    printf("[%d]PID: %d\n",current->next->jobNumber,current->next->pid);
 }//end of addToList
 
 struct bNode *getBprocess(int PID){
   struct bNode * current = bHead;
     while (current->next != NULL) {
       current = current->next;
-      if(current->pid == PID){
+      if(current->wPid == PID){
         return current;
       }
     }
@@ -78,16 +78,13 @@ void completeBprocess(int PID) {
     struct bNode * current = bHead;
     struct bNode * trash = NULL;
     while (current->next != NULL) {
-      if(current->next->pid == PID){
+      if(current->next->wPid == PID){
         trash = current->next;
         if(trash->next != NULL){
           current->next = current->next->next;
         }else{
           current->next = NULL;
         }
-        printf("--Job Complete [%d] --\n",trash->jobNumber);
-        printf("Command Name:%s\n",trash->cmdName);
-        printf("Process ID: %d\n",PID);
         free(trash);
         found++;
         bCount--;
@@ -139,7 +136,7 @@ void deleteList(){
 }
 
 // executes command
-void executeCmd(struct cmdNode *current){
+int executeCmd(struct cmdNode *current){
   char *str;
   str = current->name;
   char *token;
@@ -159,11 +156,13 @@ void executeCmd(struct cmdNode *current){
   }
   argv[i-current->isBackground] = NULL;
   //command
+
   if(execvp(argv[0], argv) == -1)
   {
     printf("User Command isn't valid.\n");
-    exit(0);
+    return -1;
   }
+  return 0;
 }
 
 void printStart(){
@@ -196,7 +195,7 @@ void printBR(){
     while (current->next != NULL) {
       current = current->next;
       printf("--Command: %s --\n",current->cmdName);
-      printf("[%d]PID: %d\n",current->jobNumber,current->pid);
+      printf("[%d]PID: %d\n",current->jobNumber,current->ePid);
     }
     printf("\n");
 }
@@ -206,11 +205,11 @@ void runStats(struct timeval tstart){
   struct rusage pages;
   // wait command for process holding
   gettimeofday(&tfinish, 0);
-  getrusage(RUSAGE_SELF, &pages);
+  getrusage(RUSAGE_CHILDREN, &pages);
   long pageFaults = pages.ru_majflt;
   long pageFaultsReclaimed = pages.ru_minflt;
   printf("== Statistics == \n Elapsed time:");
-  long time = (tfinish.tv_sec-tstart.tv_sec) + tfinish.tv_usec-tstart.tv_usec;//time value
+  long time = (tfinish.tv_sec-tstart.tv_sec)*1000 + (tfinish.tv_usec-tstart.tv_usec)/1000;//time value
   printf("%ld", time);
   printf(" milliseconds \n Page Faults: ");
   printf("%ld", pageFaults);
@@ -242,7 +241,7 @@ void purgeBList(){
   struct bNode *current=bHead;
   while(current->next!=NULL){
     current = current->next;
-    int pid = waitpid(current->pid,&status,WNOHANG);
+    int pid = waitpid(current->wPid,&status,WNOHANG);
     if(pid>0){
       completeBprocess(pid);
     }
@@ -262,6 +261,7 @@ int main(){
     printStart();
     char *optn = NULL;
     size_t buffer = 80;
+    purgeBList();
     int na = getline(&optn, &buffer, stdin);
     purgeBList();
     if(na ==-1)
@@ -397,9 +397,22 @@ void processBasicCmds(int command){
     }
 }
 
+static int validCMD = 1;
+
+static void invalidCMD(int sign){
+  validCMD = 0;
+} 
+
 void processCustomCommands(int order){
   struct timeval tstart;//struct data for time
   struct cmdNode * current = cHead;
+  signal(SIGINT,invalidCMD);
+  int status;
+  int fdc[2];
+  if(pipe(fdc)==-1){
+    fprintf(stderr, "Pipe Failed");
+  }
+  int gcPID = -1;
   int pos = order - 2;
   // get the position of the command in the LL
   int i = 0;
@@ -410,18 +423,48 @@ void processCustomCommands(int order){
   int cPID = fork();
   gettimeofday(&tstart, 0);
    // not backgroud process
-  if(cPID)// parent
-  {
-    if(current->isBackground==0){
-      wait(0);
-      runStats(tstart);
+  if(cPID==0 && current->isBackground)
+    gcPID = fork();
+
+  if((current->isBackground==0&&cPID != 0)||gcPID>0){//watcher process normally main parent
+      if(gcPID>0){                                   //if background watcher child
+        close(fdc[0]);
+        write(fdc[1],&gcPID,sizeof(gcPID));//piping info to main process
+      }
+      //close(fde[1]);
+      if(cPID){
+        waitpid(cPID,&status,0);
+      }
+      else
+        waitpid(gcPID,&status,0);
+
+      if(WIFEXITED(status)){
+        if(gcPID>0){
+          printf("\n--Job Complete [%d] --\n",bCount);
+          printf("Command ID: %d\n", current->id);
+          printf("Proccess ID: %d\n", gcPID);
+          printf("[ Output ]\n");
+        }
+        runStats(tstart);
+      }
+      if(cPID==0){
+        if(validCMD)
+          exit(0);
+        else
+          raise(SIGINT);
+      }
+    }else if(cPID != 0){
+      close(fdc[1]);
+      read(fdc[0],&gcPID,sizeof(gcPID));
+      if(validCMD){
+        addBprocess(cPID,gcPID,current,tstart);
+        printf("--Command: %s --\n",current->name);
+        printf("[%d]PID: %d\n",bCount,gcPID);
+      }
+     }else if(current->isBackground==0||gcPID==0){
+      executeCmd(current);
+      raise(SIGINT);
     }
-    else{
-      addBprocess(cPID,current,tstart);
-    } 
-  } else {// child
-        executeCmd(current);
-  }
-  
+    validCMD = 1;
 } 
         
