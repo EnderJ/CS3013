@@ -57,7 +57,7 @@ void addBprocess(int pid, struct cmdNode *n,struct timeval start) {
     // set next to NULL
     current->next->next = NULL;
     printf("--Command: %s --\n",current->next->cmdName);
-    printf("\n[%d]PID: %d",current->next->jobNumber,current->next->pid);
+    printf("[%d]PID: %d\n",current->next->jobNumber,current->next->pid);
 }//end of addToList
 
 struct bNode *getBprocess(int PID){
@@ -86,9 +86,11 @@ void completeBprocess(int PID) {
           current->next = current->next->next;
         }
         printf("--Job Complete [%d] --\n",trash->jobNumber);
-        printf("Command Name:%s",trash->cmdName);
-        printf("Process ID: PID\n");
+        printf("Command Name:%s\n",trash->cmdName);
+        printf("Process ID: %d\n",PID);
         free(trash);
+        if(current==NULL||current->next==NULL)
+          return;
       }
       current->jobNumber-=found;
       current = current->next;
@@ -191,7 +193,7 @@ void printBR(){
     while (current->next != NULL) {
       current = current->next;
       printf("--Command: %s --\n",current->cmdName);
-      printf("\n[%d]PID: %d",current->jobNumber,current->pid);
+      printf("[%d]PID: %d\n",current->jobNumber,current->pid);
     }
     printf("\n");
 }
@@ -235,8 +237,8 @@ void logOff(){
 void purgeBList(){
   int status;
   for(int i = 0; i < bCount;i++){
-    int PID = waitpid(0,&status,WNOHANG);
-    if(PID){
+    int PID = waitpid(-1,&status,WNOHANG);
+    if(PID!=0){
       runBStats(PID);
     }
   }
@@ -332,58 +334,61 @@ void processCharCommands(char order){
 }
 
 //v0 functionality
-void processBasicCmds(int order){
-  struct timeval tstart;//struct data for time
-  if(fork())
-    runStats(tstart);
-  else{
-    char *cmd;
-    switch(order){
-      case 0:
-        printf("-- Who Am I? -- \n");
-        //command parts
-        cmd = "whoami";
-        //command
-        execvp(cmd, &cmd);
-        break;
-
-      case 1:
+void processBasicCmds(int command){
+   if(fork() != 0)
+    {
+      struct timeval ts, tf;
+      struct rusage pages;
+      gettimeofday(&ts, 0);
+      wait(0);
+      gettimeofday(&tf, 0);
+      getrusage(RUSAGE_SELF, &pages);
+      long pageFaults = pages.ru_majflt;
+      long pageFaultsReclaimed = pages.ru_minflt;
+      printf("-- Statistics --- \n Elapsed time:");
+        long time = (tf.tv_sec-ts.tv_sec) + tf.tv_usec-ts.tv_usec;
+        printf("%ld", time);
+        printf(" milliseconds \n Page Faults: ");
+        printf("%ld", pageFaults);
+        printf("\n Page Faults (reclaimed): ");
+        printf("%ld \n", pageFaultsReclaimed);
+        //get reclaimed page faults
+    } else {
+      if(command==0)
+      {
+        printf("-- Who Am I? -- \n"); 
+        char *cmd = "whoami";
+        char *argv[2];
+        argv[0] = "whoami";
+        argv[1] = NULL;
+        execvp(cmd, argv);
+      }
+      else if(command==1)
+      {
         printf("-- Last Logins -- \n");
-        //command parts
-        cmd = "last";
-        //command
-        execvp(cmd, &cmd); 
-        break;
-      case 2:
-        printf("== Directory Listings == \n");
-        //command parts
-        char *ext = NULL;
-        char *path = NULL;
+        char *cmd = "last";
+        char *argv[2];
+        argv[0] = "last";
+        argv[1] = NULL;
+        execvp(cmd, argv);
+      }
+      else if(command==2)
+      {
+        printf("-- Directory Listings -- \n");
+        char ext, path;
         printf("\nArguments?: ");
-        size_t buffer = 80;
-        int na = getline(&ext, &buffer, stdin);
-        if(na == -1)
-          logOff();
-        ext[na-1] = '\0';
+        scanf("%s", &ext);
         printf("\nPath?: ");
-        size_t buffer2 = 80;
-        int na2 = getline(&path, &buffer2, stdin);
-        if(na2 == -1)
-          logOff();
-        path[na2-1] = '\0';
-        cmd = "ls";
+        scanf("%s", &path);
+        char *cmd = "ls";
         char *argv[4];
         argv[0] = "ls";
-        argv[1] = ext;
-        argv[2] = path;
+        argv[1] = &ext;
+        argv[2] = &path;
         argv[3] = NULL;
-        //command
         execvp(cmd, argv);
-        free(ext);
-        free(path);
-        break;
+      }
     }
-  }
 }
 
 void processCustomCommands(int order){
