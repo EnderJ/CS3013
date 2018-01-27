@@ -227,8 +227,10 @@ void runBStats(int PID){
 
 void logOff(){
   while(bCount > 0){
+    int cCount = bCount;
+    purgeBList();
     printf("Background Commands are still running\n");
-    runBStats(wait(0));
+    
   }
   printf("Logging you out, Commander\n");
   deleteList();
@@ -262,8 +264,9 @@ int main(){
     purgeBList();
     int na = getline(&optn, &buffer, stdin);
     purgeBList();
-    if(na ==-1)
+    if(na ==-1){
         logOff();
+    }
     optn[na-1] = '\0';
     char order = optn[0];
     int numOrder;
@@ -391,6 +394,8 @@ void processBasicCmds(int command){
         argv[2] = &path;
         argv[3] = NULL;
         execvp(cmd, argv);
+      }else{
+        exit(1);
       }
     }
 }
@@ -440,6 +445,7 @@ void processCustomCommands(int order){
       }
       if(WIFEXITED(status)){
         if(gcPID>0){
+          bCount++;
           printf("\n--Job Complete [%d] --\n",bCount);
           printf("Command ID: %d\n", current->id);
           printf("Proccess ID: %d\n", gcPID);
