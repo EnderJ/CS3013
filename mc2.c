@@ -1,9 +1,3 @@
-/*========Mid Day Commander, V2==========
-*=============Itteration: V2=============
-*====
-*/
-//include statements
-
 #include <stdio.h> 
 #include <ctype.h>
 #include <string.h>
@@ -19,13 +13,14 @@ void processCustomCommands(int cmd);
 void processCharCommands(char cmd);
 static int numID = 3;  // id of the command
 static int bCount = 0;
+static int exitFlag = 0;
+static int inputFlag = 0;
 
 struct bNode {
   int jobNumber;
-  char *cmdName;
   int pid;
+  struct cmdNode * cmd; 
   struct timeval start;
-  int cmdID;
   struct bNode *next;
 };
 
@@ -37,27 +32,24 @@ struct cmdNode {//structure for the cmdNode
   int isBackground;
 };
 
-
 // initialize LL
 struct cmdNode *cHead = NULL;
 struct bNode *bHead = NULL;
 
-// adds a process to the background process list
-void addBprocess(int pid, struct cmdNode *n,struct timeval start) {
-    struct bNode * current = bHead;
+void addBprocess(int pid,struct cmdNode *n,struct timeval start) {
+    struct bNode *current = bHead;
+    bCount = 1;
     while (current->next != NULL) {
         current = current->next;
+        bCount++;
     }//end of while
     current->next = malloc(sizeof(struct bNode));
     current->next->pid = pid;
-    current->next->cmdID = n->id;
-    current->next->jobNumber = ++bCount;
-    current->next->cmdName = n->name;
+    current->next->jobNumber = bCount;
+    current->next->cmd = n;
     current->next->start = start;
     // set next to NULL
     current->next->next = NULL;
-    printf("--Command: %s --\n",current->next->cmdName);
-    printf("[%d]PID: %d\n",current->next->jobNumber,current->next->pid);
 }//end of addToList
 
 struct bNode *getBprocess(int PID){
@@ -86,7 +78,7 @@ void completeBprocess(int PID) {
           current->next = NULL;
         }
         printf("--Job Complete [%d] --\n",trash->jobNumber);
-        printf("Command Name:%s\n",trash->cmdName);
+        printf("Command Name:%s\n",trash->cmd->name);
         printf("Process ID: %d\n",PID);
         free(trash);
         found++;
@@ -95,7 +87,6 @@ void completeBprocess(int PID) {
           return;
       }
       current = current->next;
-      current->jobNumber-=found;
       
     }
     if(!found)
@@ -103,10 +94,6 @@ void completeBprocess(int PID) {
 } // end of remove
 
 
-/**
-addToList function
-  pushes an element onto a linked list for adding a command
-*/    
 void addToList(int id, char *name, int length) {
     struct cmdNode * current = cHead;
     while (current->next != NULL) {
@@ -116,6 +103,7 @@ void addToList(int id, char *name, int length) {
     current->next->id = id;
     current->next->isBackground = 0;
     current->next->length = length;
+    //current->next->invalid = 0;
     if(name[length-1]=='&'){
       printf("b\n");
       current->next->isBackground = 1;
@@ -139,7 +127,7 @@ void deleteList(){
 }
 
 // executes command
-void executeCmd(struct cmdNode *current){
+int executeCmd(struct cmdNode *current){
   char *str;
   str = current->name;
   char *token;
@@ -159,11 +147,13 @@ void executeCmd(struct cmdNode *current){
   }
   argv[i-current->isBackground] = NULL;
   //command
+
   if(execvp(argv[0], argv) == -1)
   {
     printf("User Command isn't valid.\n");
-    exit(0);
+    return -1;
   }
+  return 0;
 }
 
 void printStart(){
@@ -185,7 +175,7 @@ void printStart(){
       printf("c. change directory : Changes process working directory\n");
       printf("e. exit : Leave Mid-Day Commander\n");
       printf("p. pwd : Prints working directory\n");
-      printf("r. running processes : Prints a list of running processes\n");
+        printf("r. running processes : Prints a list of running processes\n");
 }
 
 
@@ -195,7 +185,7 @@ void printBR(){
     printf("\n");
     while (current->next != NULL) {
       current = current->next;
-      printf("--Command: %s --\n",current->cmdName);
+      printf("--Command: %s --\n",current->cmd->name);
       printf("[%d]PID: %d\n",current->jobNumber,current->pid);
     }
     printf("\n");
@@ -206,11 +196,11 @@ void runStats(struct timeval tstart){
   struct rusage pages;
   // wait command for process holding
   gettimeofday(&tfinish, 0);
-  getrusage(RUSAGE_SELF, &pages);
+  getrusage(RUSAGE_CHILDREN, &pages);
   long pageFaults = pages.ru_majflt;
   long pageFaultsReclaimed = pages.ru_minflt;
   printf("== Statistics == \n Elapsed time:");
-  long time = (tfinish.tv_sec-tstart.tv_sec) + tfinish.tv_usec-tstart.tv_usec;//time value
+  long time = (tfinish.tv_sec-tstart.tv_sec)*1000 + (tfinish.tv_usec-tstart.tv_usec)/1000;//time value
   printf("%ld", time);
   printf(" milliseconds \n Page Faults: ");
   printf("%ld", pageFaults);
@@ -228,13 +218,9 @@ void runBStats(int PID){
 }
 
 void logOff(){
-  while(bCount > 0){
-    printf("Background Commands are still running\n");
-    runBStats(wait(0));
-  }
-  printf("Logging you out, Commander\n");
-  deleteList();
-  exit(0);
+  exitFlag = 1;
+  if(bCount>0)
+  	printf("processes still running\n");
 }
 
 void purgeBList(){
@@ -244,53 +230,91 @@ void purgeBList(){
     current = current->next;
     int pid = waitpid(current->pid,&status,WNOHANG);
     if(pid>0){
-      completeBprocess(pid);
+      runBStats(pid);
     }
   }
+}
 
+void getCMDs(int *num, char *chr){
+	fflush(stdin);
+	char *optn = malloc(sizeof(char)*80);
+      size_t buffer = 80;
+      int na = getline(&optn, &buffer, stdin);
+      if(na ==-1)
+        logOff();
+      optn[na-1] = '\0';
+      char order = optn[0];
+      int numOrder;
+      if(isdigit(order)){
+      	numOrder = atoi(optn);
+      }else{
+      	numOrder = -1;
+      }
+      *num = numOrder;
+      *chr = order;
 }
 
 int main(){
-  
   cHead = (struct cmdNode*)malloc(sizeof(struct cmdNode));
   bHead = (struct bNode*)malloc(sizeof(struct bNode));
-  
-  while(1){
-    fflush(stdin);
-    int status;
-    purgeBList();
-    printStart();
-    char *optn = NULL;
-    size_t buffer = 80;
-    int na = getline(&optn, &buffer, stdin);
-    purgeBList();
-    if(na ==-1)
-        logOff();
-    optn[na-1] = '\0';
-    char order = optn[0];
-    int numOrder;
-    if(isdigit(order)){
-        numOrder = atoi(optn);
-        if(numOrder<numID){
-          if(numOrder<3)
-            processBasicCmds(numOrder);
-          else
-            processCustomCommands(numOrder);
-        }
+	int iPID = 0;
+	int status;
+	int fda[2];
+	int fdn[2];
+	int numCMD;
+	char charCMD;
+	printStart();
+	while(bCount>0 || !exitFlag){
+		int cCount = bCount;
+		purgeBList();
+		if(cCount != bCount && exitFlag){
+      logOff();
+		}
+		if(!exitFlag&&!inputFlag){
+			inputFlag = 1;
+			pipe(fda);
+			pipe(fdn);
+			iPID=fork();
+			if(iPID==0){
+				close(fda[0]);
+				close(fdn[0]);
+				getCMDs(&numCMD,&charCMD);
+				write(fda[1],&charCMD,sizeof(charCMD));
+				write(fdn[1],&numCMD,sizeof(numCMD));
+        exit(0);
+			}
+		}
+    if(inputFlag && waitpid(iPID,&status,WNOHANG)){
+      close(fda[1]);
+      close(fdn[1]);
+      read(fda[0],&charCMD,sizeof(charCMD));
+      read(fdn[0],&numCMD,sizeof(numCMD));
+      inputFlag = 0;
+      if(numCMD==-1){
+        processCharCommands(charCMD);
+      }else{
+        if(numCMD<3)
+          processBasicCmds(numCMD);
+        else if(numCMD<numID)
+          processCustomCommands(numCMD);
         else{
-          printf("This option is currently not available. Please try again.\n");
+          printf("command does not exist");
         }
       }
-      else{
-        processCharCommands(order);
-      }
-      free(optn);
+      inputFlag = 0;
+      iPID = -1;
+      printStart();
+    }
+	}
 
-  } // while loop
-  return 0;
-} // main
+	printf("Logging you out Commander\n");
+  free(bHead);
+  free(cHead);
+}
+
 
 void processCharCommands(char order){
+
   switch(order){
         case 'a':
           printf("Command to Add:");
@@ -341,6 +365,7 @@ void processCharCommands(char order){
 
 //v0 functionality
 void processBasicCmds(int command){
+
    if(fork() != 0)
     {
       struct timeval ts, tf;
@@ -418,10 +443,12 @@ void processCustomCommands(int order){
     }
     else{
       addBprocess(cPID,current,tstart);
+      printf("\n\n-- Command: %s --\n",current->name);
+      printf("[%d] %d",bCount,cPID);
+      printf("\n\n");
     } 
   } else {// child
         executeCmd(current);
-  }
+    }
   
 } 
-        
