@@ -113,7 +113,7 @@ void addToList(int id, char *name, int length) {
     current->next->isBackground = 0;
     current->next->length = length;
     if(name[length-1]=='&'){
-      printf("b\n");
+      //printf("b\n");
       current->next->isBackground = 1;
     }
     current->next->name = (char *)malloc(sizeof(char *) * length);
@@ -216,7 +216,7 @@ void runStats(struct timeval tstart){
   printf("%ld \n", pageFaultsReclaimed);
   //get reclaimed page faults 
 }
-
+/*
 void runBStats(int PID){
   struct bNode *process = getBprocess(PID);
   if(process){
@@ -224,7 +224,7 @@ void runBStats(int PID){
     runStats(process->start);
   }
 }
-
+*/
 void purgeBList(){
   int status;
   struct bNode *current=bHead;
@@ -232,13 +232,13 @@ void purgeBList(){
     current = current->next;
     int pid = waitpid(current->wPid,&status,WNOHANG);
     if(pid>0){
-      runBStats(pid);
+      completeBprocess();
     }
   }
 }
 
 void logOff(){
-  if (bCount >0)
+  if (bCount > 0)
     printf("%d Background Commands are still running\n",bCount);
   while(bCount > 0){  
     purgeBList();
@@ -442,7 +442,6 @@ void processCustomCommands(int order){
    // not backgroud process
   if(cPID==0 && current->isBackground)
     gcPID = fork();
-
   if((current->isBackground==0&&cPID != 0)||(cPID==0 && gcPID>0)){//watcher process normally main parent
       if(gcPID>0){                                   //if background watcher child
         close(fdc[0]);
