@@ -225,18 +225,6 @@ void runBStats(int PID){
   }
 }
 
-void logOff(){
-  while(bCount > 0){
-    int cCount = bCount;
-    purgeBList();
-    printf("Background Commands are still running\n");
-    
-  }
-  printf("Logging you out, Commander\n");
-  deleteList();
-  exit(0);
-}
-
 void purgeBList(){
   int status;
   struct bNode *current=bHead;
@@ -247,6 +235,22 @@ void purgeBList(){
       runBStats(pid);
     }
   }
+}
+
+void logOff(){
+  int cCount = 0;
+  while(bCount > 0){
+    if(cCount != bCount)
+      printf("%d Background Commands are still running\n",bCount);
+    cCount = bCount;
+    purgeBList();
+    if(cCount != bCount)
+      printf("Background Commands are still running\n");
+    
+  }
+  printf("Logging you out, Commander\n");
+  deleteList();
+  exit(0);
 }
 
 int main(){
@@ -298,9 +302,25 @@ void processCharCommands(char order){
           char *cmd = NULL;
           size_t buffer = 140;
           int na = getline(&cmd, &buffer, stdin);
-          if(na == -1)
+          if(na == -1){
             logOff();
+            break;
+          }
+          if(na>129){
+            printf("Command invalid maximum of 128 characters\n");
+            break;
+          }
           cmd[na-1] = '\0';
+          int i = 0;
+          char *token;
+          while(token != NULL){
+              token = strtok(NULL, " "); // advances to the next token
+              i++;
+              if(i>=32){
+                printf("Command invalid maximum of 32 arguments\n");
+                break;
+              }
+          }
           //add the command to list
           addToList(numID, cmd, strlen(cmd));
           printf("Okay commander, added with ID: %d\n", numID);
@@ -341,34 +361,22 @@ void processCharCommands(char order){
 }
 
 //v0 functionality
-void processBasicCmds(int command){
-   if(fork() != 0)
-    {
-      struct timeval ts, tf;
-      struct rusage pages;
+void processBasicCmds(int command){ 
+      struct timeval ts;
       gettimeofday(&ts, 0);
-      wait(0);
-      gettimeofday(&tf, 0);
-      getrusage(RUSAGE_SELF, &pages);
-      long pageFaults = pages.ru_majflt;
-      long pageFaultsReclaimed = pages.ru_minflt;
-      printf("-- Statistics --- \n Elapsed time:");
-        long time = (tf.tv_sec-ts.tv_sec) + tf.tv_usec-ts.tv_usec;
-        printf("%ld", time);
-        printf(" milliseconds \n Page Faults: ");
-        printf("%ld", pageFaults);
-        printf("\n Page Faults (reclaimed): ");
-        printf("%ld \n", pageFaultsReclaimed);
-        //get reclaimed page faults
-    } else {
       if(command==0)
-      {
+      { 
         printf("-- Who Am I? -- \n"); 
         char *cmd = "whoami";
         char *argv[2];
         argv[0] = "whoami";
         argv[1] = NULL;
-        execvp(cmd, argv);
+        if(fork()==0)
+          execvp(cmd, argv);
+        else{
+          wait(0);
+          runStats(ts);
+        }
       }
       else if(command==1)
       {
@@ -377,27 +385,42 @@ void processBasicCmds(int command){
         char *argv[2];
         argv[0] = "last";
         argv[1] = NULL;
-        execvp(cmd, argv);
+        if(fork()==0)
+          execvp(cmd, argv);
+        else{
+          wait(0);
+          runStats(ts);
+        }
       }
       else if(command==2)
       {
         printf("-- Directory Listings -- \n");
-        char ext, path;
+        char* ext, path;
         printf("\nArguments?: ");
-        scanf("%s", &ext);
+        int na = getline(&ext, &buffer, stdin);
+        if(na ==-1){
+          logOff();
+        }
+        ext[na-1] = '\0';
         printf("\nPath?: ");
-        scanf("%s", &path);
+        na = getline(&path, &buffer, stdin);
+        if(na ==-1){
+          logOff();
+        }
+        path[na-1] = '\0';
         char *cmd = "ls";
         char *argv[4];
         argv[0] = "ls";
-        argv[1] = &ext;
-        argv[2] = &path;
+        argv[1] = ext;
+        argv[2] = path;
         argv[3] = NULL;
-        execvp(cmd, argv);
-      }else{
-        exit(1);
+        if(fork()==0)
+          execvp(cmd, argv);
+        else{
+          wait(0);
+          runStats(ts);
+        }
       }
-    }
 }
 /*
 static int validCMD = 1;
