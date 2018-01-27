@@ -238,15 +238,10 @@ void purgeBList(){
 }
 
 void logOff(){
-  int cCount = 0;
-  while(bCount > 0){
-    if(cCount != bCount)
-      printf("%d Background Commands are still running\n",bCount);
-    cCount = bCount;
+  if (bCount >0)
+    printf("%d Background Commands are still running\n",bCount);
+  while(bCount > 0){  
     purgeBList();
-    if(cCount != bCount)
-      printf("Background Commands are still running\n");
-    
   }
   printf("Logging you out, Commander\n");
   deleteList();
@@ -360,66 +355,60 @@ void processCharCommands(char order){
   printf("\n");// seperating midday output
 }
 
-//v0 functionality
-void processBasicCmds(int command){ 
-      struct timeval ts;
-      gettimeofday(&ts, 0);
-      if(command==0)
-      { 
-        printf("-- Who Am I? -- \n"); 
-        char *cmd = "whoami";
-        char *argv[2];
-        argv[0] = "whoami";
-        argv[1] = NULL;
-        if(fork()==0)
-          execvp(cmd, argv);
+void executeBasicCmds(char *argv[]){
+  struct timeval ts;
+  gettimeofday(&ts, 0);
+  if(fork()==0)
+          execvp(argv[0], argv);
         else{
           wait(0);
           runStats(ts);
         }
+}
+//v0 functionality
+void processBasicCmds(int command){ 
+      
+      if(command==0)
+      { 
+        printf("-- Who Am I? -- \n"); 
+        char *argv[2];
+        argv[0] = "whoami";
+        argv[1] = NULL;
+        executeBasicCmds(argv);
+        return;
       }
       else if(command==1)
       {
         printf("-- Last Logins -- \n");
-        char *cmd = "last";
         char *argv[2];
         argv[0] = "last";
         argv[1] = NULL;
-        if(fork()==0)
-          execvp(cmd, argv);
-        else{
-          wait(0);
-          runStats(ts);
-        }
+        executeBasicCmds(argv);
       }
       else if(command==2)
       {
+        size_t buffer = 80;
         printf("-- Directory Listings -- \n");
-        char* ext, path;
+        char *ext; 
+        char *path;
         printf("\nArguments?: ");
-        int na = getline(&ext, &buffer, stdin);
-        if(na ==-1){
+        int na1 = getline(&ext, &buffer, stdin);
+        if(na1 ==-1){
           logOff();
         }
-        ext[na-1] = '\0';
+        ext[na1-1] = '\0';
         printf("\nPath?: ");
-        na = getline(&path, &buffer, stdin);
-        if(na ==-1){
+        int na2 = getline(&path, &buffer, stdin);
+        if(na2 ==-1){
           logOff();
         }
-        path[na-1] = '\0';
-        char *cmd = "ls";
+        path[na2-1] = '\0';
         char *argv[4];
         argv[0] = "ls";
         argv[1] = ext;
         argv[2] = path;
         argv[3] = NULL;
-        if(fork()==0)
-          execvp(cmd, argv);
-        else{
-          wait(0);
-          runStats(ts);
-        }
+        executeBasicCmds(argv);
       }
 }
 /*
@@ -454,7 +443,7 @@ void processCustomCommands(int order){
   if(cPID==0 && current->isBackground)
     gcPID = fork();
 
-  if((current->isBackground==0&&cPID != 0)||gcPID>0){//watcher process normally main parent
+  if((current->isBackground==0&&cPID != 0)||(cPID==0 && gcPID>0)){//watcher process normally main parent
       if(gcPID>0){                                   //if background watcher child
         close(fdc[0]);
         write(fdc[1],&gcPID,sizeof(gcPID));//piping info to main process
